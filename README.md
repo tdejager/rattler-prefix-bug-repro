@@ -37,6 +37,43 @@ bytes adjacent to the new prefix, and pads the freed bytes at the **end** of
 the region with `\0`. The total region length is preserved; byte offsets
 inside it are not, and Rust slice metadata is never updated.
 
+```
+key:  [ ... ]   bytes in .rodata
+      ^════     a Rust &'static str — fixed pointer + compile-time length
+      .         NUL byte
+
+
+BEFORE rewrite — build-time layout in .rodata:
+
+   [ P L A C E H O L D E R / r u n t i m e d e p . ]
+     ^═════════════════ BAKED ═════════════════════
+                                          ^═══ DEP   (linker suffix-merged
+                                                      into BAKED's tail)
+
+
+AFTER rewrite — rattler replaces `PLACEHOLDER` with `/short` and pads the
+freed bytes at the end of the C-string region with NULs:
+
+   [ / s h o r t / r u n t i m e d e p . . . . . . ]
+     ^═════════════════ BAKED ═════════════════════
+                                          ^═══ DEP
+
+   BAKED reads as:  "/short/runtimedep\0\0\0\0\0\0"
+                                       ^^^^^^^^^^^^
+                                       embedded NULs are inside the
+                                       slice → first CString::new fails
+
+   DEP reads as:    "\0\0\0"
+                    ^^^^^^^^
+                    DEP's compile-time offset now lies in the trailing
+                    NUL padding; the original "dep" bytes still exist
+                    elsewhere in the binary, just not under this pointer
+```
+
+The `(ptr, len)` slice header for both `BAKED` and `DEP` is finalised at
+compile time and rattler never updates it. Both failure modes follow from
+that, and they reproduce together in this minimal example.
+
 ## Two failure modes, both visible above
 
 **Trailing-pad (`BAKED`).** The baked `&str`'s `(ptr, len)` was finalised at
