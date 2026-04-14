@@ -1,0 +1,17 @@
+[workspace]
+name = "rattler-prefix-bug-repro"
+description = "Minimal reproducer for rattler binary prefix relocation corrupting baked &str constants"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64"]
+
+[dependencies]
+rust = ">=1.82"
+# C linker / sysroot for cargo
+compilers = "*"
+
+[tasks]
+# The harness builds the victim itself (with the BAKED env var set), so
+# there is no standalone build-victim task — building victim without BAKED
+# would just fail to compile.
+repro = "cargo run --release -p harness"
+clean = "cargo clean"

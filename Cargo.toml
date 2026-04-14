@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["victim", "harness"]
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+[profile.release]
+# Mirror what most production Rust binaries on conda-forge ship with.
+# The bug doesn't require LTO=fat to surface, but turning it on makes the
+# linker's string merging more aggressive and thus more reproducible.
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
