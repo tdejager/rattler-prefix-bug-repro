@@ -49,23 +49,31 @@ accept the embedded NULs silently, but `CString::new` rejects them — so the
 first syscall (`open`, `stat`, `realpath`, …) fails. This is what surfaces in
 the reproducer as `CString::new(BAKED) = error (nul byte found at position 45)`.
 
-**Linker-merge aliasing (`DEP`, `BUILD`).** Linkers (LLD, ld64) deduplicate
-string literals by tail-merging: if `"dep"` appears as a suffix of any longer
-literal, the linker can free the `"dep"` allocation and rewrite all
-references to point into the middle of the longer string. With LTO and
-codegen-units=1, this happens here for `DEP` and `BUILD`, which get aliased
-into the tail of `BAKED`. After the compact-shift, those fixed offsets land
-inside the trailing NUL padding, so the constants now read `\0\0\0` and
-`\0\0\0\0\0` — even though their original bytes still exist elsewhere in
-the binary under different pointers.
+**Linker suffix merging (`DEP`, `BUILD`).** This is a documented linker
+optimisation: identical and tail-overlapping read-only string literals are
+deduplicated, with shorter literals' references rewritten to point into the
+*middle* of a longer literal that ends with the same bytes. On ELF the
+optimisation is gated by the `SHF_MERGE | SHF_STRINGS` section flags
+documented in the [ELF gABI section header
+spec](https://refspecs.linuxfoundation.org/elf/gabi4+/ch4.sheader.html#sh_flags);
+on Mach-O it's the analogous `S_CSTRING_LITERALS` section type. The
+implementation in LLVM lives in [`llvm::StringTableBuilder`](https://llvm.org/doxygen/classllvm_1_1StringTableBuilder.html),
+which documents that it "deduplicates identical strings, and also performs
+suffix merging".
 
-The aliasing failure is the worse of the two: it's silent (no `CString`
-error to catch), version-dependent (different rustc/linker combos give
-different results), and can affect any const literal short enough to be
-suffix-merged into a baked path. It's the failure mode that broke
-[inko](https://inko-lang.org) on conda-forge — `pub const DEP: &str = "dep"`
-became `\0\0\0`, `cwd.join(DEP)` produced `cwd/\0\0\0`, and `inko check
-hello.inko` failed at every invocation. See [conda-forge/staged-recipes#32967](https://github.com/conda-forge/staged-recipes/pull/32967).
+In this reproducer, with LTO and `codegen-units = 1`, `DEP` and `BUILD` get
+suffix-merged into the tail of `BAKED`. After the rewriter's compact-shift,
+the fixed offsets where `DEP` and `BUILD` used to alias now land inside the
+trailing NUL padding, so the constants read `\0\0\0` and `\0\0\0\0\0` even
+though their original bytes still exist elsewhere in the binary under
+different pointers.
+
+This failure mode is the worse of the two: it's silent (no `CString` error
+to catch), it depends on rustc/LLVM/linker version and optimisation flags,
+and it can affect any short read-only string constant in any tool that
+also bakes a path containing the constant's bytes as a suffix. The bytes
+that get clobbered look like junk const data; the bug surfaces only when
+some hot-path code actually dereferences the affected constant.
 
 ## What we'd like rattler to consider
 
