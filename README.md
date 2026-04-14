@@ -91,7 +91,7 @@ some hot-path code actually dereferences the affected constant.
   damage in some scenarios.
 ```
 
-## Caveats
+### Caveats
 
 - The aliasing failure depends on rustc/LLVM/linker versions and
   optimisation flags. The workspace pins `lto = "fat"` and
