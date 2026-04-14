@@ -1,7 +1,25 @@
 # rattler prefix relocation bug — minimal reproducer
 
 Demonstrates that `rattler::install::link::copy_and_replace_cstring_placeholder`
-silently corrupts baked `&'static str` constants in installed Rust binaries..
+silently corrupts baked `&'static str` constants in installed Rust binaries.
+
+The reproducer:
+
+1. Builds a tiny `victim` binary with a long placeholder path baked into it
+   via `env!("BAKED")`, plus two adjacent short consts (`DEP = "dep"`,
+   `BUILD = "build"`).
+2. Runs the unmodified `victim` and confirms `BAKED`, `DEP`, and `BUILD`
+   all read as expected.
+3. Calls `rattler::install::link::copy_and_replace_cstring_placeholder`
+   directly to rewrite the binary's bytes, replacing the long placeholder
+   with a shorter target prefix — exactly what `rattler` does at install
+   time when relocating a package.
+4. On macOS, re-signs the rewritten binary with an ad-hoc signature
+   (`codesign -s -`) because modifying a Mach-O invalidates its existing
+   signature; rattler's real install path does the equivalent.
+5. Runs the rewritten `victim` and observes that `BAKED` now contains
+   embedded NUL bytes (so `CString::new(BAKED)` fails) and that `DEP` and
+   `BUILD` now read as `\0\0\0` and `\0\0\0\0\0`.
 
 ## Reproduce
 
