@@ -72,24 +72,6 @@ also bakes a path containing the constant's bytes as a suffix. The bytes
 that get clobbered look like junk const data; the bug surfaces only when
 some hot-path code actually dereferences the affected constant.
 
-## What we'd like rattler to consider
-
-- **Document the failure mode** in the Rust packaging guidance and recommend
-  exe-relative discovery (via `current_exe()` / `argv[0]` / `dladdr`) over
-  baked `env!()` paths. `rustc`, `zig`, `clang`, `cpython`, and Ruby with
-  `LOAD_RELATIVE` already do this.
-- **Optional:** emit a packaging-time warning when a placeholder occurrence
-  sits inside a NUL-bounded region that contains additional content past
-  the obvious path tail — that's the structural signature of merged
-  literals being adjacent to a baked path.
-- **Optional:** reconsider the in-region replacement strategy. The current
-  "compact + trailing pad" corrupts aliased neighbours but leaves the baked
-  path's bytes intact. Writing `<actual_prefix><NUL padding><original tail>`
-  instead would corrupt the baked path itself with mid-string NULs (breaks
-  at the first syscall, loud and immediate) but leaves aliased neighbours
-  alone. Different trade-off; both seem better than silent collateral
-  damage in some scenarios.
-```
 
 ### Caveats
 
