@@ -1,10 +1,7 @@
 # rattler prefix relocation bug — minimal reproducer
 
 Demonstrates that `rattler::install::link::copy_and_replace_cstring_placeholder`
-silently corrupts baked `&'static str` constants in installed Rust binaries.
-No `rattler-build`, no recipe, no conda metadata — one `pixi` task builds a
-tiny victim binary, calls the rattler API directly, and observes the
-corruption.
+silently corrupts baked `&'static str` constants in installed Rust binaries..
 
 ## Reproduce
 
@@ -92,19 +89,6 @@ some hot-path code actually dereferences the affected constant.
   at the first syscall, loud and immediate) but leaves aliased neighbours
   alone. Different trade-off; both seem better than silent collateral
   damage in some scenarios.
-
-What rattler can't realistically do: walk Rust slice metadata to update
-`(ptr, len)` pairs after a shift, or prevent the linker from merging
-strings in the first place.
-
-## Layout
-
-```
-.
-├── pixi.toml          rust + cargo from conda-forge
-├── Cargo.toml         workspace; release profile uses LTO=fat, codegen-units=1
-├── victim/src/main.rs ~50 lines — baked &str + adjacent short consts
-└── harness/src/main.rs ~80 lines — builds victim, calls rattler, runs
 ```
 
 ## Caveats
